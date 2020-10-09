@@ -1,8 +1,8 @@
-require('dotenv').config();
-const express = require('express');
-const sql = require('mysql2/promise');
-const cors = require('cors');
-const { urlencoded, request } = require('express');
+require("dotenv").config();
+const express = require("express");
+const sql = require("mysql2/promise");
+const cors = require("cors");
+const { urlencoded, request, response } = require("express");
 const PORT = 4000;
 
 const app = express();
@@ -16,11 +16,11 @@ const pool = sql.createPool({
   password: process.env.password,
 });
 
-app.get('/get-shows', async (req, resp) => {
-  console.log('get shows hit');
+app.get("/get-shows", async (req, resp) => {
+  console.log("get shows hit");
   try {
     const conn = await pool.getConnection();
-    const response = await conn.execute('SELECT * FROM tvSeriesDb.shows');
+    const response = await conn.execute("SELECT * FROM tvSeriesDb.shows");
     // const shows = resp[0]
     conn.release();
     resp.status(200).send(response[0]);
@@ -30,15 +30,15 @@ app.get('/get-shows', async (req, resp) => {
   }
 });
 
-app.get('/get-user', async (req, resp) => {
-  console.log('get user hit');
+app.get("/get-user", async (req, resp) => {
+  console.log("get user hit");
   try {
     const conn = await pool.getConnection();
     const username = req.query.username;
     console.log(username);
     const response = await conn.execute(
       `SELECT * FROM tvSeriesDb.users WHERE username=?`,
-      [username],
+      [username]
     );
     conn.release();
     resp.status(200).send(response[0][0]);
@@ -48,8 +48,8 @@ app.get('/get-user', async (req, resp) => {
   }
 });
 
-app.post('/create-user', async (req, resp) => {
-  console.log('create user hit');
+app.post("/create-user", async (req, resp) => {
+  console.log("create user hit");
   try {
     const conn = await pool.getConnection();
     const username = req.body.username;
@@ -61,7 +61,7 @@ app.post('/create-user', async (req, resp) => {
       `
             INSERT INTO tvSeriesDb.users (username, profilePic, aboutMe, age) VALUES (?,?,?,?)
         `,
-      [username, profilePic, aboutMe, age],
+      [username, profilePic, aboutMe, age]
     );
 
     conn.release();
@@ -72,8 +72,8 @@ app.post('/create-user', async (req, resp) => {
   }
 });
 
-app.post('/create-show', async (req, resp) => {
-  console.log('create show hit');
+app.post("/create-show", async (req, resp) => {
+  console.log("create show hit");
   try {
     const imdbId = req.body.imdbId;
     const title = req.body.title;
@@ -106,11 +106,84 @@ app.post('/create-show', async (req, resp) => {
         totalSeasons,
         released,
         rated,
-      ],
+      ]
     );
 
     conn.release();
     resp.status(200).send(response);
+  } catch (error) {
+    console.log(error);
+    resp.status(500).send(error);
+  }
+});
+
+app.get("/show-by-id", async (req, resp) => {
+  try {
+    const imdbId = req.query.imdbId;
+    const conn = await pool.getConnection();
+    const show = await conn.execute(
+      `SELECT * FROM tvSeriesDb.shows WHERE imdbId = ?`,
+      [imdbId]
+    );
+    conn.release();
+    resp.status(201).send(show[0][0]);
+  } catch (error) {
+    console.log(error);
+    resp.status(500).send(error);
+  }
+});
+
+//create-review
+
+app.post("/create-review", async (req, resp) => {
+  try {
+    const showId = req.body.showId;
+    const reviewedBy = req.body.reviewedBy;
+    const review = req.body.review;
+    const rating = req.body.rating;
+
+    const conn = await pool.getConnection();
+    const response = await conn.execute(
+      `INSERT INTO tvSeriesDb.reviews (showId, reviewedBy, review, rating) VALUES (?,?,?,?)`,
+      [showId, reviewedBy, review, rating]
+    );
+    conn.release();
+    resp.status(201).send(response);
+  } catch (error) {
+    console.log(error);
+    resp.status(500).send(error);
+  }
+});
+
+app.get("/review-by-showid", async (req, resp) => {
+  try {
+    const showId = req.query.showId;
+    const conn = await pool.getConnection();
+
+    const response = await conn.execute(
+      `SELECT * FROM tvSeriesDb.reviews WHERE showId = ?`,
+      [showId]
+    );
+    conn.release();
+    resp.status(201).send(response[0]);
+  } catch (error) {
+    console.log(error);
+    resp.status(500).send(error);
+  }
+});
+
+app.post("/follow-user", async (req, resp) => {
+  try {
+    const userFollowed = req.body.userFollowed;
+    const userFollowedBy = req.body.userFollowedBy;
+
+    const conn = await pool.getConnection();
+    const followUser = await conn.execute(
+      `INSERT INTO tvSeriesDb.following (userFollowed, userFollowedBy) VALUES (?,?)`,
+      [userFollowed, userFollowedBy]
+    );
+    conn.release();
+    resp.status(201).send(followUser);
   } catch (error) {
     console.log(error);
     resp.status(500).send(error);
