@@ -4,6 +4,7 @@ const sql = require("mysql2/promise");
 const cors = require("cors");
 const { urlencoded, request, response } = require("express");
 const PORT = 4000;
+const authorizeUser = require("./authorize/functions");
 
 const app = express();
 app.use(express.json());
@@ -48,11 +49,11 @@ app.get("/get-user", async (req, resp) => {
   }
 });
 
-app.post("/create-user", async (req, resp) => {
+app.post("/create-user", authorizeUser, async (req, resp) => {
   console.log("create user hit");
   try {
     const conn = await pool.getConnection();
-    const username = req.body.username;
+    const username = req.decodedToken["cognito:username"];
     const profilePic = req.body.profilePic;
     const aboutMe = req.body.aboutMe;
     const age = req.body.age;
