@@ -31,18 +31,38 @@ app.get("/get-shows", async (req, resp) => {
   }
 });
 
-app.get("/get-user", async (req, resp) => {
+app.post("/get-user", authorizeUser, async (req, resp) => {
   console.log("get user hit");
   try {
     const conn = await pool.getConnection();
-    const username = req.query.username;
+    const username = req.decodedToken["cognito:username"];
     console.log(username);
     const response = await conn.execute(
       `SELECT * FROM tvSeriesDb.users WHERE username=?`,
       [username]
     );
     conn.release();
+    console.log(response[0][0]);
     resp.status(200).send(response[0][0]);
+  } catch (error) {
+    console.log(error);
+    resp.status(500).send(error);
+  }
+});
+
+app.put("/update-user", authorizeUser, async (req, resp) => {
+  try {
+    const conn = await pool.getConnection();
+    const username = req.decodedToken["cognito:username"];
+    const profilePic = req.body.profilePic;
+    const aboutMe = req.body.aboutMe;
+    const age = req.body.age;
+    const response = await conn.execute(
+      "UPDATE tvSeriesDb.users SET profilePic = ? ,aboutMe = ? ,age = ? WHERE username = ? ",
+      [profilePic, aboutMe, age, username]
+    );
+    conn.release();
+    resp.status(201).send(response);
   } catch (error) {
     console.log(error);
     resp.status(500).send(error);
