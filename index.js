@@ -5,6 +5,7 @@ const cors = require("cors");
 const { urlencoded, request, response } = require("express");
 const PORT = 4000;
 const authorizeUser = require("./authorize/functions");
+const aws = require('aws-sdk')
 
 const app = express();
 app.use(express.json());
@@ -16,6 +17,14 @@ const pool = sql.createPool({
   user: process.env.user,
   password: process.env.password,
 });
+
+aws.config.setPromisesDependency()
+aws.config.update({
+  accessKeyId: process.env.s3TokenKey,
+  secretAccessKey: process.env.s3Secret,
+  region: 'us-east-1'
+})
+const s3 = new aws.S3()
 
 app.get("/get-shows", async (req, resp) => {
   console.log("get shows hit");
@@ -30,6 +39,38 @@ app.get("/get-shows", async (req, resp) => {
     resp.status(500).send(error);
   }
 });
+
+app.post('/get-s3-pic', authorizeUser, async(req, resp) => {
+  console.log('get s3 pic hit')
+  try {
+    const username = req.decodedToken["cognito:username"];
+    const conn = await pool.getConnection()
+    const response = await conn.execute('SELECT profilePic from tvSeriesDb.users WHERE username=?',[username])
+    const profilePic = `public/${response[0][0].profilePic}`
+
+    const params = {Bucket: 'profilebucket140003-showreview', Key: profilePic, Expires: 30}
+
+    s3.getSignedUrlPromise('getObject', params)
+    .then((url) => resp.status(200).send(url))
+    .catch((err)=> resp.status(500).send(err))
+  } catch (error) {
+    console.log(error);
+    resp.status(500).send(error);
+  }
+})
+
+app.post('/get-profile-pic', authorizeUser, async(req,resp) => {
+  try {
+    const username = req.decodedToken["cognito:username"];
+    const conn = await pool.getConnection()
+    const response = await conn.execute('SELECT profilePic from tvSeriesDb.users WHERE username=?',[username])
+    conn.release()
+    resp.status(200).send(response[0][0]);
+  } catch (error) {
+    console.log(error);
+    resp.status(500).send(error);
+  }
+})
 
 app.post("/get-user", authorizeUser, async (req, resp) => {
   console.log("get user hit");
@@ -49,6 +90,22 @@ app.post("/get-user", authorizeUser, async (req, resp) => {
     resp.status(500).send(error);
   }
 });
+
+app.put('/update-pic', authorizeUser, async (req, resp) => {
+  try {
+    const conn = await pool.getConnection()
+    const username = req.decodedToken["cognito:username"];
+    const profilePic = req.body.profilePic
+
+    const result = await conn.execute('UPDATE tvSeriesDb.users SET profilePic=? WHERE username=?',[profilePic, username])
+
+    conn.release()
+    resp.status(201).send(result);
+  } catch (error) {
+    console.log(error);
+    resp.status(500).send(error);
+  }
+})
 
 app.put("/update-user", authorizeUser, async (req, resp) => {
   try {
