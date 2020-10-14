@@ -254,16 +254,53 @@ app.get("/review-by-showid", async (req, resp) => {
   try {
     const showId = req.query.showId;
     const conn = await pool.getConnection();
-
+    await conn.query("USE tvSeriesDb");
     const response = await conn.execute(
-      `SELECT * FROM tvSeriesDb.reviews WHERE showId = ?`,
+      `SELECT * FROM (SELECT * FROM shows as newShows 
+        JOIN reviews as newReviews
+        ON newShows.imdbId = newReviews.showId) as newTable WHERE newTable.imdbId=?`,
       [showId]
     );
+
     conn.release();
     resp.status(201).send(response[0]);
   } catch (error) {
     console.log(error);
     resp.status(500).send(error);
+  }
+});
+
+app.get("/all-reviews", async (req, resp) => {
+  try {
+    const conn = await pool.getConnection();
+    await conn.query("USE tvSeriesDb");
+    const response = await conn.execute(`SELECT * FROM shows as newShows
+    JOIN (SELECT * FROM reviews ) as newReviews
+    ON newShows.imdbId = newReviews.showId`);
+    conn.release();
+    resp.status(200).send(response);
+  } catch (error) {
+    resp.status(500).send(error);
+    console.log(error);
+  }
+});
+
+app.post("/reviews-by-user", authorizeUser, async (req, resp) => {
+  try {
+    const reviewedBy = req.decodedToken["cognito:username"];
+    const conn = await pool.getConnection();
+    await conn.query("USE tvSeriesDb");
+    const response = await conn.execute(
+      `SELECT * FROM (SELECT * FROM shows as newShows 
+        JOIN reviews as newReviews
+        ON newShows.imdbId = newReviews.showId) as newTable WHERE newTable.reviewedBy=?`,
+      [reviewedBy]
+    );
+    conn.release();
+    resp.status(200).send(response);
+  } catch (error) {
+    resp.status(500).send(error);
+    console.log(error);
   }
 });
 
@@ -282,6 +319,24 @@ app.post("/follow-user", authorizeUser, async (req, resp) => {
   } catch (error) {
     console.log(error);
     resp.status(500).send(error);
+  }
+});
+
+app.post("/unfollow-user", authorizeUser, async (req, resp) => {
+  try {
+    const userFollowed = req.body.userFollowed;
+    const userFollowedBy = req.decodedToken["cognito:username"];
+
+    const conn = await pool.getConnection();
+    await conn.execute(
+      `DELETE FROM tvSeriesDb.following WHERE userFollowed=? && userFollowedBy=?`,
+      [userFollowed, userFollowedBy]
+    );
+    conn.release();
+    resp.status(200).send({ message: "successfully deleted" });
+  } catch (error) {
+    resp.status(500).send(error);
+    console.log(error);
   }
 });
 
