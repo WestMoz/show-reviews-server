@@ -5,7 +5,7 @@ const cors = require("cors");
 const { urlencoded, request, response } = require("express");
 const PORT = 4000;
 const authorizeUser = require("./authorize/functions");
-const aws = require('aws-sdk')
+const aws = require("aws-sdk");
 
 const app = express();
 app.use(express.json());
@@ -18,13 +18,13 @@ const pool = sql.createPool({
   password: process.env.password,
 });
 
-aws.config.setPromisesDependency()
+aws.config.setPromisesDependency();
 aws.config.update({
   accessKeyId: process.env.s3TokenKey,
   secretAccessKey: process.env.s3Secret,
-  region: 'us-east-1'
-})
-const s3 = new aws.S3()
+  region: "us-east-1",
+});
+const s3 = new aws.S3();
 
 app.get("/get-shows", async (req, resp) => {
   console.log("get shows hit");
@@ -40,37 +40,51 @@ app.get("/get-shows", async (req, resp) => {
   }
 });
 
-app.post('/get-s3-pic', authorizeUser, async(req, resp) => {
-  console.log('get s3 pic hit')
+app.post("/get-s3-pic", authorizeUser, async (req, resp) => {
+  console.log("get s3 pic hit");
   try {
     const username = req.decodedToken["cognito:username"];
-    const conn = await pool.getConnection()
-    const response = await conn.execute('SELECT profilePic from tvSeriesDb.users WHERE username=?',[username])
-    const profilePic = `public/${response[0][0].profilePic}`
+    const conn = await pool.getConnection();
+    const response = await conn.execute(
+      "SELECT profilePic from tvSeriesDb.users WHERE username=?",
+      [username]
+    );
+    const profilePic = `public/${response[0][0].profilePic}`;
 
-    const params = {Bucket: 'profilebucket140003-showreview', Key: profilePic, Expires: 30}
+    const params = {
+      Bucket: "profilebucket140003-showreview",
+      Key: profilePic,
+      Expires: 30,
+    };
 
-    s3.getSignedUrlPromise('getObject', params)
-    .then((url) => resp.status(200).send(url))
-    .catch((err)=> resp.status(500).send(err))
+    s3.getSignedUrlPromise("getObject", params)
+      .then((url) => {
+        console.log(url);
+        resp.status(200).send(url);
+      })
+
+      .catch((err) => resp.status(500).send(err));
   } catch (error) {
     console.log(error);
     resp.status(500).send(error);
   }
-})
+});
 
-app.post('/get-profile-pic', authorizeUser, async(req,resp) => {
+app.post("/get-profile-pic", authorizeUser, async (req, resp) => {
   try {
     const username = req.decodedToken["cognito:username"];
-    const conn = await pool.getConnection()
-    const response = await conn.execute('SELECT profilePic from tvSeriesDb.users WHERE username=?',[username])
-    conn.release()
+    const conn = await pool.getConnection();
+    const response = await conn.execute(
+      "SELECT profilePic from tvSeriesDb.users WHERE username=?",
+      [username]
+    );
+    conn.release();
     resp.status(200).send(response[0][0]);
   } catch (error) {
     console.log(error);
     resp.status(500).send(error);
   }
-})
+});
 
 app.post("/get-user", authorizeUser, async (req, resp) => {
   console.log("get user hit");
@@ -91,21 +105,24 @@ app.post("/get-user", authorizeUser, async (req, resp) => {
   }
 });
 
-app.put('/update-pic', authorizeUser, async (req, resp) => {
+app.put("/update-pic", authorizeUser, async (req, resp) => {
   try {
-    const conn = await pool.getConnection()
+    const conn = await pool.getConnection();
     const username = req.decodedToken["cognito:username"];
-    const profilePic = req.body.profilePic
+    const profilePic = req.body.profilePic;
 
-    const result = await conn.execute('UPDATE tvSeriesDb.users SET profilePic=? WHERE username=?',[profilePic, username])
+    const result = await conn.execute(
+      "UPDATE tvSeriesDb.users SET profilePic=? WHERE username=?",
+      [profilePic, username]
+    );
 
-    conn.release()
+    conn.release();
     resp.status(201).send(result);
   } catch (error) {
     console.log(error);
     resp.status(500).send(error);
   }
-})
+});
 
 app.put("/update-user", authorizeUser, async (req, resp) => {
   try {
@@ -213,10 +230,10 @@ app.get("/show-by-id", async (req, resp) => {
 
 //create-review
 
-app.post("/create-review", async (req, resp) => {
+app.post("/create-review", authorizeUser, async (req, resp) => {
   try {
     const showId = req.body.showId;
-    const reviewedBy = req.body.reviewedBy;
+    const reviewedBy = req.decodedToken["cognito:username"];
     const review = req.body.review;
     const rating = req.body.rating;
 
@@ -250,10 +267,10 @@ app.get("/review-by-showid", async (req, resp) => {
   }
 });
 
-app.post("/follow-user", async (req, resp) => {
+app.post("/follow-user", authorizeUser, async (req, resp) => {
   try {
     const userFollowed = req.body.userFollowed;
-    const userFollowedBy = req.body.userFollowedBy;
+    const userFollowedBy = req.decodedToken["cognito:username"];
 
     const conn = await pool.getConnection();
     const followUser = await conn.execute(
@@ -262,6 +279,22 @@ app.post("/follow-user", async (req, resp) => {
     );
     conn.release();
     resp.status(201).send(followUser);
+  } catch (error) {
+    console.log(error);
+    resp.status(500).send(error);
+  }
+});
+
+app.post("/all-followed-users", authorizeUser, async (req, resp) => {
+  try {
+    const userFollowedBy = req.decodedToken["cognito:username"];
+    const conn = await pool.getConnection();
+    const usersFollowed = await conn.execute(
+      `SELECT * FROM tvSeriesDb.following WHERE userFollowedBy = ?`,
+      [userFollowedBy]
+    );
+    conn.release();
+    resp.status(201).send(usersFollowed[0]);
   } catch (error) {
     console.log(error);
     resp.status(500).send(error);
